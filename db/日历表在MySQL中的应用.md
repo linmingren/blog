@@ -24,12 +24,12 @@
    	m tinyint NULL comment '月份',
    	d tinyint NULL comment '天',
    	dw tinyint NULL comment '每周的第几天',
-   	monthName VARCHAR(9) NULL,
-   	dayName VARCHAR(9) NULL,
+   	monthName VARCHAR(9) NULL comment '比如 一月',
+   	dayName VARCHAR(9) NULL comment '比如 礼拜一',
    	w tinyint NULL comment '第几周',
-   	isWeekday BINARY(1) NULL comment '是否周末',
-   	isHoliday BINARY(1) NULL comment '是否假日',
-   	holidayDescr VARCHAR(32) NULL comment '假日的描述'
+   	isWeekday SMALLINT(1) NULL comment '是否工作日',
+   	isHoliday SMALLINT(1) NULL comment '是否假日',
+   	holidayDescr VARCHAR(32) NULL comment '假日的描述， 比如元旦'
    );
    ```
    
@@ -56,7 +56,27 @@ WHERE (a.i*1000 + b.i*100 + c.i*10 + d.i) <= 3985
 ORDER BY 1;
 ```
 
-执行完毕后，日历表里就有了从2020年2月2号到2030年12月31号的所有日期。
+执行完毕后，日历表里就有了从2020年2月2号到2030年12月31号的所有日期。接下来更新其他字段，
+
+```sql
+UPDATE calendar_table
+SET isWeekday = CASE WHEN dayofweek(dt) IN (1,7) THEN 0 ELSE 1 END,
+	isHoliday = 0,
+	y = YEAR(dt),
+	q = quarter(dt),
+	m = MONTH(dt),
+	d = dayofmonth(dt),
+	dw = dayofweek(dt),
+	monthname = monthname(dt),
+	dayname = dayname(dt),
+	w = week(dt),
+	holidayDescr = '';
+```
+
+最后更新假日字段， 因为每年的假日不是固定的， 所以这些SQL只能根据国际发布的通知来写具体的代码。 下面举个例子是元旦，这是个固定的日期，所以写出来比较简单。其他假期可以按照这个模式来处理。
+```sql
+UPDATE calendar_table SET isHoliday = 1, holidayDescr = 'New Year''s Day' WHERE m = 1 AND d = 1;
+```
    
  ### 参考资料
  

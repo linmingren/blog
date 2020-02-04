@@ -1,7 +1,63 @@
    根据日期来统计是非常常见的需求， 一般我们都是把时间字段通过DATE_FORMAT函数转成日期，或者月份，然后对转换后的字段进行GROUP BY来达到统计的效果。
 通过GROUP BY来统计日期一个常见的问题是， 如果某一天没有记录，那么GROUP BY的结果集里也不会有这一天， 这肯定不是我们想要的结果。 如果是统计当天注册人数，
-那么我们希望的结果是仍然显示这个日期，只是结果是0. 如果是统计累计注册人数， 那么我们希望的结果前一天的结果。
-   
+那么我们希望的结果是仍然显示这个日期，只是结果是0. 如果是统计累计注册人数， 那么我们希望的结果前一天的结果。为了简单起见， 我们构建下面这个user表。
+然后完成2个简单的统计
+
+* 每天新增的注册人数
+* 每周新增的注册人数
+
+```sql
+CREATE TABLE user (
+    id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+   	user_name VARCHAR(16) NULL comment '用户名',
+    signed_up_at DATETIME NOT NULL comment '注册时间'
+);
+
+INSERT INTO user (user_name, signed_up_at)
+VALUES
+('test1', '2020-01-01 00:00:00'),
+('test2', '2020-01-01 00:00:00'),
+('test3', '2020-01-02 00:00:00'),
+('test4', '2020-01-02 00:00:00'),
+('test5', '2020-01-04 00:00:00'),
+('test6', '2020-01-12 00:00:00'),
+('test7', '2020-01-12 00:00:00'),
+('test8', '2020-01-18 00:00:00'),
+('test9', '2020-01-19 00:00:00'),
+('test10', '2020-01-19 00:00:00');
+```
+  对第一个统计，我们通过下面的group by语句看能不能达到我们想要的结果
+```sql
+select DATE_FORMAT(signed_up_at,'%Y-%m-%d') as day, 
+             count(*) 
+             from user 
+             group by day;
+```
+  结果是这样的, 数据是对的，但是有一些日期，比如1月3号没有注册人数，我们期望的结果是显示这一天注册人数为0， 而不是没有记录。
+```concept
+    day      count(*)
+    2020-01-01	2
+    2020-01-02	2
+    2020-01-04	1
+    2020-01-12	2
+    2020-01-18	1
+    2020-01-19	2
+
+```
+   对第二个统计，我们通过下面的group by语句看能不能达到我们想要的结果
+  ```sql
+ select week(signed_up_at) as week, 
+ count(*) 
+ from user 
+ group by week;
+  ```
+   结果是这样的， 问题和按天GROUP BY的一样，比如第二周没有人注册，那么我们期望的结果是第二周注册人数为0， 而不是没有记录。
+  ```concept
+      week      count(*)
+        0	     5
+        2	     3
+        3	     2
+  ```
    上面的统计可能还是比较简单的， 如果老板要我们统计工作日的注册人数， 还有周末的注册人数， 甚至统计假日的注册人数（除了周末还有法定假日， 像国庆这种假日还有调休），那
  通过GROUP BY来统计实在太难了。这个时候就是所谓的“日历表”大显身手的时候了。
  
@@ -10,9 +66,9 @@
   和业务相关的表进行join查询就能比较容易地对业务进行统计。
   
    那日历表里面的记录要怎么构造出来呢？ 首先日期的范围是可以预先估计出来的，开始时间应该是你的业务上线的那一天， 结束时间可以设计成上线后的10年， 全部不会超过4千条记录。
-  如果你想得到很准确的天数，可以用datediff函数， 比如上线时间是2020年2月2号，预计上线到2030年12月31， 那么下面的sql语句可以得到准确的天数，也就是3985天。
+  如果你想得到很准确的天数，可以用datediff函数， 比如上线时间是2020年1月1号，预计上线到2030年12月31， 那么下面的sql语句可以得到准确的天数，也就是4017天。
   ```sql
-  SELECT datediff('2030-12-31','2020-02-02');
+  SELECT datediff('2030-12-31','2020-01-01');
   ```
   
     接下来可以定义日历表的具体字段，注意这些只是最常见的字段， 业务线可以添加其他相关的字段
@@ -50,9 +106,9 @@ INSERT INTO ints VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 接下来先初始化日历表的dt字段，其他字段的值可以根据这个字段算出来。我们在from后面一共join了4次，那么会生成1万条记录，但是我们只要3985条，所以在where语句里进行限制就行了。
 ```sql
 INSERT INTO calendar_table (dt)
-SELECT DATE('2020-02-02') + INTERVAL a.i*1000 + b.i*100 + c.i*10 + d.i DAY
+SELECT DATE('2020-01-01') + INTERVAL a.i*1000 + b.i*100 + c.i*10 + d.i DAY
 FROM ints a JOIN ints b JOIN ints c JOIN ints d
-WHERE (a.i*1000 + b.i*100 + c.i*10 + d.i) <= 3985
+WHERE (a.i*1000 + b.i*100 + c.i*10 + d.i) <= 4017
 ORDER BY 1;
 ```
 
@@ -78,6 +134,58 @@ SET isWeekday = CASE WHEN dayofweek(dt) IN (1,7) THEN 0 ELSE 1 END,
 UPDATE calendar_table SET isHoliday = 1, holidayDescr = 'New Year''s Day' WHERE m = 1 AND d = 1;
 ```
    
+  有了这个日历表， 我们就可以完美结果本文开头的2个统计了。第一个统计可以这么写.
+ ```sql
+select c.dt as day, IFNULL(u.signup_number,0) from calendar_table c
+left join
+(select DATE_FORMAT(signed_up_at,'%Y-%m-%d') as day, 
+             count(*) as signup_number
+             from user 
+             group by day) u on c.dt = u.day
+order by c.dt limit 20;
+ ```
+ 结果如下, 可以看到那些没有用户注册的日期， 对应的注册次数都是0。
+ ```sql
+   day    signup_number
+ 2020-01-01	2
+ 2020-01-02	2
+ 2020-01-03	0
+ 2020-01-04	1
+ 2020-01-05	0
+ 2020-01-06	0
+ 2020-01-07	0
+ 2020-01-08	0
+ 2020-01-09	0
+ 2020-01-10	0
+ 2020-01-11	0
+ 2020-01-12	2
+ 2020-01-13	0
+ 2020-01-14	0
+ 2020-01-15	0
+ 2020-01-16	0
+ 2020-01-17	0
+ 2020-01-18	1
+ 2020-01-19	2
+ ```
+ 第二个统计可以这么写(需要把sql_mode=only_full_group_by禁用)
+ ```sql
+select c.w as week, IFNULL(u.signup_number,0) as signup_number from calendar_table c
+left join
+( select week(signed_up_at) as week, 
+ count(*) as signup_number
+ from user 
+ group by week) u on c.w = u.week
+group by week order by week
+ ```
+ 结果如下，可以看到如果某一周内没有会员注册，那么注册人数列是0， 而不是没有这条记录。
+ ```concept
+  week   signup_number
+   0	     5
+   1	     0
+   2	     3
+   3	     2
+```
+ 
  ### 参考资料
  
  * [MySQL最简单入门](https://www3.ntu.edu.sg/home/ehchua/programming/sql/MySQL_Beginner.html)

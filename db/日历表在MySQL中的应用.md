@@ -192,3 +192,4 @@ group by week order by week
  * [SQL数据分析](http://www.silota.com/docs/recipes/mysql-sequential-generate-series-numbers-time.html)
  * [日历表](http://www.brianshowalter.com/calendar_tables)
  * [如何在MySQL里生成日期](https://blog.csdn.net/qiuli_liu/article/details/81707562)
+ * [MySQL入门](https://popsql.com/learn-sql/mysql/how-to-have-multiple-counts-in-mysql/)
